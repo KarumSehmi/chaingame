@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Chain Game</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+        }
+
+        .autocomplete-suggestions {
+            border: 1px solid #ccc;
+            background: #fff;
+            overflow: auto;
+            position: absolute;
+            z-index: 9999;
+            max-height: 150px;
+        }
+
+        .autocomplete-suggestion {
+            padding: 8px;
+            cursor: pointer;
+        }
+
+            .autocomplete-suggestion:hover {
+                background: #ddd;
+            }
+
+        .form-group {
+            position: relative;
+        }
+
+        .loading-spinner {
+            display: none;
+            margin-left: 10px;
+        }
+
+        .btn-custom {
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            transition: background-color 0.3s ease;
+        }
+
+            .btn-custom:hover {
+                background-color: #0056b3;
+            }
+
+        .chain-card {
+            margin-top: 20px;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+            .chain-card .card-header {
+                font-weight: bold;
+                border-radius: 10px 10px 0 0;
+                background: linear-gradient(to right, #007bff, #0056b3);
+                color: white;
+            }
+
+        .chain-link {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: -10px;
+            margin-bottom: 10px;
+        }
+
+        .card-table th,
+        .card-table td {
+            vertical-align: middle;
+        }
+
+        /* Dark mode styles */
+        .dark-mode {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+
+            .dark-mode .autocomplete-suggestions {
+                background: #333;
+                border-color: #555;
+            }
+
+            .dark-mode .autocomplete-suggestion {
+                color: #e0e0e0;
+            }
+
+                .dark-mode .autocomplete-suggestion:hover {
+                    background: #555;
+                }
+
+            .dark-mode .btn-custom {
+                background-color: #444;
+                color: #e0e0e0;
+            }
+
+                .dark-mode .btn-custom:hover {
+                    background-color: #666;
+                }
+
+            .dark-mode .card {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+                border: none;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            }
+
+            .dark-mode .card-header {
+                background: linear-gradient(to right, #444, #666);
+                color: #e0e0e0;
+            }
+
+            .dark-mode .table {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+            }
+
+                .dark-mode .table th,
+                .dark-mode .table td {
+                    color: #e0e0e0;
+                }
+
+            .dark-mode .link {
+                color: #76c7c0;
+            }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6 text-center">
+                <h1 class="mb-4">Player Chain Game</h1>
+                <button id="toggle-dark-mode" class="btn btn-custom mb-4">Toggle Dark Mode</button>
+                <form id="player-form" class="mb-4">
+                    <div class="form-row align-items-center">
+                        <div class="col-12 col-sm-5 mb-2 mb-sm-0">
+                            <div class="form-group">
+                                <label for="start-player">Start Player:</label>
+                                <input type="text" id="start-player" name="start-player" class="form-control" autocomplete="off">
+                                <div id="start-player-suggestions" class="autocomplete-suggestions"></div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-5 mb-2 mb-sm-0">
+                            <div class="form-group">
+                                <label for="end-player">End Player:</label>
+                                <input type="text" id="end-player" name="end-player" class="form-control" autocomplete="off">
+                                <div id="end-player-suggestions" class="autocomplete-suggestions"></div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-2 text-center">
+                            <button type="submit" class="btn btn-custom w-100">Find Link</button>
+                            <div class="loading-spinner" id="loading-spinner">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="sr-only">Searching...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="link-type">Link Type:</label>
+                        <select id="link-type" name="link-type" class="form-control">
+                            <option value="club">Club Only</option>
+                            <option value="both">Both Club and International</option>
+                        </select>
+                    </div>
+                </form>
+                <div id="result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            function setupAutocomplete(inputId, suggestionsId) {
+                const input = document.getElementById(inputId);
+                const suggestionsBox = document.getElementById(suggestionsId);
+                const cache = {};
+
+                let timeout = null;
+
+                input.addEventListener('input', function () {
+                    clearTimeout(timeout);
+                    const query = input.value;
+
+                    if (query.length < 2) {
+                        suggestionsBox.innerHTML = '';
+                        return;
+                    }
+
+                    if (cache[query]) {
+                        displaySuggestions(cache[query]);
+                    } else {
+                        timeout = setTimeout(async () => {
+                            const response = await fetch(`/game/suggest_player_names?query=${encodeURIComponent(query)}`);
+                            const suggestions = await response.json();
+                            cache[query] = suggestions;
+                            displaySuggestions(suggestions);
+                        }, 300); // 300 ms delay to reduce number of requests
+                    }
+                });
+
+                function displaySuggestions(suggestions) {
+                    suggestionsBox.innerHTML = '';
+                    suggestions.forEach(suggestion => {
+                        const div = document.createElement('div');
+                        div.classList.add('autocomplete-suggestion');
+                        div.textContent = suggestion;
+                        div.addEventListener('click', function () {
+                            input.value = suggestion;
+                            suggestionsBox.innerHTML = '';
+                        });
+                        suggestionsBox.appendChild(div);
+                    });
+                }
+
+                document.addEventListener('click', function (event) {
+                    if (!suggestionsBox.contains(event.target) && event.target !== input) {
+                        suggestionsBox.innerHTML = '';
+                    }
+                });
+            }
+
+            setupAutocomplete('start-player', 'start-player-suggestions');
+            setupAutocomplete('end-player', 'end-player-suggestions');
+
+            document.getElementById('player-form').addEventListener('submit', async function (event) {
+                event.preventDefault();
+                document.getElementById('loading-spinner').style.display = 'inline-block';
+                const startPlayer = document.getElementById('start-player').value;
+                const endPlayer = document.getElementById('end-player').value;
+                const linkType = document.getElementById('link-type').value;
+                const response = await fetch(`/game/find_link?start_player=${encodeURIComponent(startPlayer)}&end_player=${encodeURIComponent(endPlayer)}&link_type=${encodeURIComponent(linkType)}`);
+                const data = await response.json();
+                document.getElementById('loading-spinner').style.display = 'none';
+                console.log('Received data:', data); // Add this line to inspect the data
+                if (response.ok) {
+                    let resultHTML = '<h2>Shortest Link:</h2>';
+                    data.forEach((link, index) => {
+                        resultHTML += `<div class="card chain-card">
+                                        <div class="card-header">${link.player}</div>
+                                        <div class="card-body">
+                                            <p>Common Clubs:</p>
+                                            <table class="table table-bordered card-table">
+                                                <thead><tr><th>Season</th><th>Club</th></tr></thead>
+                                                <tbody>`;
+                        link.common_clubs.forEach(club => {
+                            resultHTML += `<tr><td>${club.season}</td><td>${club.team}</td></tr>`;
+                        });
+                        resultHTML += `</tbody></table>`;
+                        if (linkType === "both" && link.common_intl.length > 0) {
+                            resultHTML += `<p>Common International Teams:</p>
+                                            <table class="table table-bordered card-table">
+                                                <thead><tr><th>Season</th><th>Team</th></tr></thead>
+                                                <tbody>`;
+                            link.common_intl.forEach(team => {
+                                resultHTML += `<tr><td>${team.season}</td><td>${team.team}</td></tr>`;
+                            });
+                            resultHTML += `</tbody></table>`;
+                        }
+                        resultHTML += `<p class="chain-link">↓</p>
+                                        <p><a href="${link.wiki_url}" target="_blank" class="link">${link.next_player}</a></p>
+                                    </div>
+                                </div>`;
+                    });
+                    document.getElementById('result').innerHTML = resultHTML;
+                } else {
+                    document.getElementById('result').innerHTML = `<p>Error: ${data.error}</p>`;
+                }
+            });
+
+            // Dark mode toggle
+            const toggleDarkModeBtn = document.getElementById('toggle-dark-mode');
+            toggleDarkModeBtn.addEventListener('click', function () {
+                document.body.classList.toggle('dark-mode');
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,282 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Player Chain</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+        }
+
+        .btn-custom {
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            transition: background-color 0.3s ease;
+        }
+
+            .btn-custom:hover {
+                background-color: #0056b3;
+            }
+
+        .chain-card {
+            margin-top: 20px;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+            .chain-card .card-header {
+                font-weight: bold;
+                border-radius: 10px 10px 0 0;
+                background: linear-gradient(to right, #007bff, #0056b3);
+                color: white;
+            }
+
+        .chain-link {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: -10px;
+            margin-bottom: 10px;
+        }
+
+        .valid-link {
+            color: green;
+        }
+
+        .invalid-link {
+            color: red;
+        }
+
+        .autocomplete-suggestions {
+            border: 1px solid #ccc;
+            background: #fff;
+            overflow: auto;
+            position: absolute;
+            z-index: 9999;
+            max-height: 150px;
+        }
+
+        .autocomplete-suggestion {
+            padding: 8px;
+            cursor: pointer;
+        }
+
+            .autocomplete-suggestion:hover {
+                background: #ddd;
+            }
+
+        .form-group {
+            position: relative;
+        }
+
+        .dark-mode {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+
+            .dark-mode .btn-custom {
+                background-color: #444;
+                color: #e0e0e0;
+            }
+
+                .dark-mode .btn-custom:hover {
+                    background-color: #666;
+                }
+
+            .dark-mode .card {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+                border: none;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            }
+
+            .dark-mode .card-header {
+                background: linear-gradient(to right, #444, #666);
+                color: #e0e0e0;
+            }
+
+            .dark-mode .table {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+            }
+
+                .dark-mode .table th,
+                .dark-mode .table td {
+                    color: #e0e0e0;
+                }
+
+            .dark-mode .link {
+                color: #76c7c0;
+            }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6 text-center">
+                <h1 class="mb-4">Create Player Chain</h1>
+                <button id="toggle-dark-mode" class="btn btn-custom mb-4">Toggle Dark Mode</button>
+                <div class="card chain-card">
+                    <div class="card-header">Chain Players</div>
+                    <div class="card-body">
+                        <form id="chain-form" method="POST">
+                            {% csrf_token %}
+                            <div class="form-group">
+                                <label for="start-player">Start Player:</label>
+                                <input type="text" id="start-player" name="start-player" class="form-control" value="{{ start_player }}" readonly>
+                            </div>
+                            <div id="intermediate-players">
+                                <!-- Intermediate players will be added here dynamically -->
+                            </div>
+                            <div class="form-group">
+                                <label for="end-player">End Player:</label>
+                                <input type="text" id="end-player" name="end-player" class="form-control" value="{{ end_player }}" readonly>
+                            </div>
+                            <button type="button" id="add-player" class="btn btn-secondary mb-3">Add Intermediate Player</button>
+                            <button type="submit" class="btn btn-custom">Submit Chain</button>
+                        </form>
+                        <div id="result"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('chain-form');
+            const intermediatePlayersContainer = document.getElementById('intermediate-players');
+            let playerCount = 0;
+
+            document.getElementById('add-player').addEventListener('click', function () {
+                playerCount++;
+                const div = document.createElement('div');
+                div.classList.add('form-group');
+                div.setAttribute('id', `player-group-${playerCount}`);
+                div.innerHTML = `
+                        <label for="intermediate-player-${playerCount}">Intermediate Player ${playerCount}:</label>
+                        <input type="text" id="intermediate-player-${playerCount}" name="intermediate-player-${playerCount}" class="form-control">
+                        <div id="intermediate-player-suggestions-${playerCount}" class="autocomplete-suggestions"></div>
+                        <button type="button" class="btn btn-danger btn-sm mt-2 remove-player" data-player-id="${playerCount}">Remove</button>
+                    `;
+                intermediatePlayersContainer.appendChild(div);
+                setupAutocomplete(`intermediate-player-${playerCount}`, `intermediate-player-suggestions-${playerCount}`);
+            });
+
+            intermediatePlayersContainer.addEventListener('click', function (event) {
+                if (event.target.classList.contains('remove-player')) {
+                    const playerId = event.target.getAttribute('data-player-id');
+                    const playerGroup = document.getElementById(`player-group-${playerId}`);
+                    playerGroup.remove();
+                }
+            });
+
+            form.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                const startPlayer = document.getElementById('start-player').value;
+                const endPlayer = document.getElementById('end-player').value;
+                const intermediatePlayers = [];
+                for (let i = 1; i <= playerCount; i++) {
+                    const playerInput = document.getElementById(`intermediate-player-${i}`);
+                    if (playerInput) {
+                        const player = playerInput.value;
+                        if (player) {
+                            intermediatePlayers.push(player);
+                        }
+                    }
+                }
+
+                const response = await fetch('/game/validate_chain/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        start_player: startPlayer,
+                        end_player: endPlayer,
+                        intermediate_players: intermediatePlayers
+                    })
+                });
+
+                const data = await response.json();
+                if (data.valid) {
+                    document.getElementById('result').innerHTML = '<p class="text-success">Valid chain!</p>';
+                } else {
+                    if (data.invalid_links) {
+                        let resultHTML = '<p class="text-danger">Invalid chain! Issues with the following links:</p><ul>';
+                        data.invalid_links.forEach(link => {
+                            resultHTML += `<li class="${link.reason === 'No common teams' ? 'invalid-link' : 'valid-link'}">From <strong>${link.from}</strong> <span class="chain-link">&#x2192;</span> <strong>${link.to}</strong> (${link.reason})</li>`;
+                        });
+                        resultHTML += '</ul>';
+                        document.getElementById('result').innerHTML = resultHTML;
+                    } else {
+                        document.getElementById('result').innerHTML = `<p class="text-danger">${data.message}</p>`;
+                    }
+                }
+            });
+
+            function setupAutocomplete(inputId, suggestionsId) {
+                const input = document.getElementById(inputId);
+                const suggestionsBox = document.getElementById(suggestionsId);
+                const cache = {};
+
+                let timeout = null;
+
+                input.addEventListener('input', function () {
+                    clearTimeout(timeout);
+                    const query = input.value;
+
+                    if (query.length < 2) {
+                        suggestionsBox.innerHTML = '';
+                        return;
+                    }
+
+                    if (cache[query]) {
+                        displaySuggestions(cache[query]);
+                    } else {
+                        timeout = setTimeout(async () => {
+                            const response = await fetch(`/game/suggest_player_names?query=${encodeURIComponent(query)}`);
+                            const suggestions = await response.json();
+                            cache[query] = suggestions;
+                            displaySuggestions(suggestions);
+                        }, 300); // 300 ms delay to reduce number of requests
+                    }
+                });
+
+                function displaySuggestions(suggestions) {
+                    suggestionsBox.innerHTML = '';
+                    suggestions.forEach(suggestion => {
+                        const div = document.createElement('div');
+                        div.classList.add('autocomplete-suggestion');
+                        div.textContent = suggestion;
+                        div.addEventListener('click', function () {
+                            input.value = suggestion;
+                            suggestionsBox.innerHTML = '';
+                        });
+                        suggestionsBox.appendChild(div);
+                    });
+                }
+
+                document.addEventListener('click', function (event) {
+                    if (!suggestionsBox.contains(event.target) && event.target !== input) {
+                        suggestionsBox.innerHTML = '';
+                    }
+                });
+            }
+
+            const toggleDarkModeBtn = document.getElementById('toggle-dark-mode');
+            toggleDarkModeBtn.addEventListener('click', function () {
+                document.body.classList.toggle('dark-mode');
+            });
+        });
+    </script>
+</body>
+</html>
